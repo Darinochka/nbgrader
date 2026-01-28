@@ -17,6 +17,8 @@ from ..preprocessors import (
     ClearOutput,
     ClearHiddenTests,
     ClearMarkScheme,
+    ClearLLMCriteria,
+    ClearLLMAnswers,
 )
 from traitlets.config.loader import Config
 from typing import Any
@@ -61,6 +63,8 @@ class GenerateAssignment(BaseConverter):
         InstantiateTests,
         LockCells,
         ClearSolutions,
+        ClearLLMCriteria,
+        ClearLLMAnswers,
         ClearOutput,
         CheckCellMetadata,
         ComputeChecksums,

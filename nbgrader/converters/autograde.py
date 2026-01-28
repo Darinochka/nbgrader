@@ -9,7 +9,7 @@ from nbconvert.preprocessors import ClearMetadataPreprocessor
 from .base import BaseConverter, NbGraderException
 from ..preprocessors import (
     AssignLatePenalties, ClearOutput, DeduplicateIds, OverwriteCells, SaveAutoGrades,
-    Execute, LimitOutput, OverwriteKernelspec, CheckCellMetadata, IgnorePattern)
+    Execute, LimitOutput, OverwriteKernelspec, CheckCellMetadata, IgnorePattern, LLMGrade)
 from ..api import Gradebook, MissingEntry
 from .. import utils
 
@@ -64,6 +64,7 @@ class Autograde(BaseConverter):
         IgnorePattern,
         ClearMetadataPreprocessor,
         LimitOutput,
+        LLMGrade,
         SaveAutoGrades,
         AssignLatePenalties,
         CheckCellMetadata

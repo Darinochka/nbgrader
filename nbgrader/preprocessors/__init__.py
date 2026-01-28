@@ -18,6 +18,9 @@ from .clearhiddentests import ClearHiddenTests
 from .clearmarkingscheme import ClearMarkScheme
 from .overwritekernelspec import OverwriteKernelspec
 from .ignorepattern import IgnorePattern
+from .llmgrade import LLMGrade
+from .clearlmcriteria import ClearLLMCriteria
+from .clearlmanswers import ClearLLMAnswers
 
 __all__ = [
     "AssignLatePenalties",
@@ -39,4 +42,7 @@ __all__ = [
     "ClearMarkScheme",
     "OverwriteKernelspec",
     "IgnorePattern",
+    "LLMGrade",
+    "ClearLLMCriteria",
+    "ClearLLMAnswers",
 ]

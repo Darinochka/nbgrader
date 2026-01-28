@@ -109,3 +109,83 @@ are running a shared server with JupyterHub. In this case, you will likely need 
 
 3. An ``nbgrader_config.py`` file in the course directory itself. The options in this config file will only be relevant for the formgrader, and not any other user accounts.
 
+LLM Grading Configuration
+--------------------------
+
+nbgrader supports LLM (Large Language Model) grading for answer cells. To use this feature, you need to configure the LLM API settings in your ``nbgrader_config.py`` file.
+
+Here is an example configuration for using OpenAI's API::
+
+    c = get_config()
+    
+    # LLM API configuration
+    c.LLMGrade.llm_api_key = "your-api-key-here"
+    c.LLMGrade.llm_api_base = "https://api.openai.com/v1"
+    c.LLMGrade.llm_model = "gpt-4"
+    
+    # Optional: Customize the prompt template
+    c.LLMGrade.llm_prompt_template = """
+    You are grading a student's answer to a question.
+    
+    Question: {question}
+    
+    Student's Answer: {student_answer}
+    
+    Grading Instructions (hidden from student): {grading_instructions}
+    
+    Maximum Points: {max_points}
+    
+    Please evaluate the student's answer based on the grading instructions and return ONLY a number between 0 and {max_points} representing the points the student should receive. Do not include any explanation, just the number.
+    """
+    
+    # Optional: Customize delimiters for question and criteria regions
+    # Default: 'BEGIN QUESTION_LLM'
+    c.LLMGrade.begin_question_delimiter = 'BEGIN QUESTION_LLM'
+    # Default: 'END QUESTION_LLM'
+    c.LLMGrade.end_question_delimiter = 'END QUESTION_LLM'
+    # Default: 'BEGIN CRITERIA_LLM'
+    c.ClearLLMCriteria.begin_criteria_delimiter = 'BEGIN CRITERIA_LLM'
+    # Default: 'END CRITERIA_LLM'
+    c.ClearLLMCriteria.end_criteria_delimiter = 'END CRITERIA_LLM'
+    
+    # Optional: Set timeout for API calls (in seconds)
+    c.LLMGrade.llm_timeout = 30.0
+
+For using other OpenAI-compatible APIs (such as local models or other providers), you can change the ``llm_api_base`` to point to your API endpoint::
+
+    c.LLMGrade.llm_api_base = "https://your-api-endpoint.com/v1"
+
+**Note:** You need to install either the ``openai`` Python package (recommended) or the ``requests`` package for LLM grading to work. If neither is available, LLM grading will be skipped with a warning.
+
+LLM Graded Cell Structure
+--------------------------
+
+LLM graded cells use a special structure with two types of regions:
+
+1. **Question region** (visible to students): between ``### BEGIN QUESTION_LLM`` and ``### END QUESTION_LLM``
+2. **Criteria region** (hidden from students, used by LLM): between ``### BEGIN CRITERIA_LLM`` and ``### END CRITERIA_LLM``
+
+Example LLM graded cell in source version::
+
+    ### BEGIN QUESTION_LLM
+    Explain what recursion is in programming. Provide an example.
+    ### END QUESTION_LLM
+
+    ### BEGIN CRITERIA_LLM
+    Grading criteria:
+    - 10 points: Complete explanation with correct example
+    - 7 points: Good explanation but incomplete example
+    - 4 points: Partial understanding, no example
+    - 0 points: Incorrect answer
+    ### END CRITERIA_LLM
+
+After running ``nbgrader generate_assignment``, students will see::
+
+    Explain what recursion is in programming. Provide an example.
+
+    YOUR ANSWER HERE
+
+The criteria region is completely removed and only the question remains visible.
+
+**Note:** The delimiters can be written with or without the ``###`` prefix. Both ``### BEGIN QUESTION_LLM`` and ``BEGIN QUESTION_LLM`` will work, as long as the delimiter text appears in the line.
+

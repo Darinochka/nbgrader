@@ -461,6 +461,7 @@ class CellWidget extends Panel {
       ['task', 'Manually graded task'],
       ['solution', 'Autograded answer'],
       ['tests', 'Autograded tests'],
+      ['llm', 'LLM graded answer'],
       ['readonly', 'Read-only']
     ]);
     if (this.cellModel.type !== 'code') {

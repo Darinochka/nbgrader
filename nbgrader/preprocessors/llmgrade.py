@@ -134,6 +134,10 @@ class LLMGrade(NbGraderPreprocessor):
         self.student_id = resources['nbgrader']['student']
         self.db_url = resources['nbgrader']['db_url']
 
+        # Initialize llm_scores dict in resources
+        if 'llm_scores' not in resources['nbgrader']:
+            resources['nbgrader']['llm_scores'] = {}
+
         # connect to the database
         self.gradebook = Gradebook(self.db_url)
 
@@ -330,22 +334,20 @@ class LLMGrade(NbGraderPreprocessor):
         # Grade the cell using LLM
         score = self._grade_with_llm(cell)
 
-        # Store the score in cell metadata
+        # Store the score in resources dict (not in cell metadata to avoid schema validation errors)
         # SaveAutoGrades will pick it up and save it to the database
+        grade_id = cell.metadata['nbgrader']['grade_id']
+        if 'llm_scores' not in resources['nbgrader']:
+            resources['nbgrader']['llm_scores'] = {}
+        
         if score is not None:
-            # Store in metadata so SaveAutoGrades can use it
-            if 'llm_score' not in cell.metadata['nbgrader']:
-                cell.metadata['nbgrader']['llm_score'] = {}
-            cell.metadata['nbgrader']['llm_score'] = score
-            # Also set it directly in a way that determine_grade can return it
-            # We'll override determine_grade behavior for LLM cells
-            # by storing the score in metadata
+            resources['nbgrader']['llm_scores'][grade_id] = score
         else:
-            # Mark as needing manual review
-            cell.metadata['nbgrader']['llm_score'] = None
+            # Mark as None for manual review
+            resources['nbgrader']['llm_scores'][grade_id] = None
             self.log.warning(
                 "LLM grading failed for cell %s. Marking for manual review.",
-                cell.metadata['nbgrader'].get('grade_id', 'unknown')
+                grade_id
             )
 
         return cell, resources

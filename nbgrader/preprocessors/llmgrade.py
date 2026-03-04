@@ -166,6 +166,7 @@ class LLMGrade(NbGraderPreprocessor):
                     base_url=self.llm_api_base,
                     # timeout=self.llm_timeout
                 )
+                self.log.info("Prompt: %s", prompt)
                 response = client.chat.completions.create(
                     model=self.llm_model,
                     messages=[
@@ -281,6 +282,7 @@ class LLMGrade(NbGraderPreprocessor):
             )
 
             # Extract question and criteria from source cell
+            self.log.info("Source cell: %s", source_cell.source)
             question_text = self._extract_question(source_cell.source)
             criteria_text = self._extract_criteria(source_cell.source)
 

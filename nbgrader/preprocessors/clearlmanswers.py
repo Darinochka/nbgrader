@@ -74,10 +74,6 @@ class ClearLLMAnswers(NbGraderPreprocessor):
         before_question_lines = []
 
         for line in lines:
-            # Skip criteria regions (they should already be removed by ClearLLMCriteria)
-            # But check anyway in case they weren't removed yet
-            if "BEGIN CRITERIA_LLM" in line or "END CRITERIA_LLM" in line:
-                continue
             if self.begin_question_delimiter in line:
                 if in_question:
                     raise RuntimeError("Encountered nested begin question statements")
@@ -116,25 +112,18 @@ class ClearLLMAnswers(NbGraderPreprocessor):
             return cell, resources
 
         language = resources["language"]
-        
-        # Extract question region (this also removes criteria regions)
-        question_text, found_question = self._extract_question_region(cell)
-        
-        # Clean up question text (remove empty lines at start/end)
-        question_text = question_text.strip()
-        
+
+        # Validate question/criteria structure (raises on malformed regions)
+        # but intentionally discard the question itself so it is not shown.
+        self._extract_question_region(cell)
+
         if cell.cell_type == 'code':
             stub = self.code_stub[language]
         else:
             stub = self.text_stub
-        
-        # If question region was found, keep it and add stub
-        if found_question and question_text:
-            # Combine question with stub
-            cell.source = question_text + "\n\n" + stub
-        else:
-            # No question region found or empty, replace entire cell with stub
-            # This handles the case where question is not explicitly marked
-            cell.source = stub
+
+        # Always replace the entire cell contents with the stub so that
+        # neither the delimiters nor the question are visible to students.
+        cell.source = stub
 
         return cell, resources

@@ -1,12 +1,14 @@
 import re
-from typing import Tuple, Optional
+from typing import Any, Optional, Tuple
 from textwrap import dedent
 
 from traitlets import Unicode, Float
+from traitlets.config.loader import Config
 from nbformat.notebooknode import NotebookNode
 from nbconvert.exporters.exporter import ResourcesDict
 
 from . import NbGraderPreprocessor
+from .llm_delimiters import merge_shared_llm_delimiter_config
 from .. import utils
 from ..api import Gradebook, MissingEntry
 
@@ -126,6 +128,10 @@ class LLMGrade(NbGraderPreprocessor):
             """
         )
     ).tag(config=True)
+
+    def _load_config(self, cfg: Config, **kwargs: Any) -> None:
+        merge_shared_llm_delimiter_config(cfg, "LLMGrade")
+        super(LLMGrade, self)._load_config(cfg, **kwargs)
 
     def preprocess(self, nb: NotebookNode, resources: ResourcesDict) -> Tuple[NotebookNode, ResourcesDict]:
         # pull information from the resources

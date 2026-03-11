@@ -138,15 +138,16 @@ Here is an example configuration for using OpenAI's API::
     Please evaluate the student's answer based on the grading instructions and return ONLY a number between 0 and {max_points} representing the points the student should receive. Do not include any explanation, just the number.
     """
     
-    # Optional: Customize delimiters for question and criteria regions
-    # Default: 'BEGIN QUESTION_LLM'
-    c.LLMGrade.begin_question_delimiter = 'BEGIN QUESTION_LLM'
-    # Default: 'END QUESTION_LLM'
-    c.LLMGrade.end_question_delimiter = 'END QUESTION_LLM'
-    # Default: 'BEGIN CRITERIA_LLM'
-    c.ClearLLMCriteria.begin_criteria_delimiter = 'BEGIN CRITERIA_LLM'
-    # Default: 'END CRITERIA_LLM'
-    c.ClearLLMCriteria.end_criteria_delimiter = 'END CRITERIA_LLM'
+    # Optional: Customize delimiters for question and criteria regions in one place
+    # These values are shared by LLMGrade, ClearLLMAnswers, and ClearLLMCriteria
+    c.LLMDelimiterConfig.begin_question_delimiter = 'BEGIN QUESTION_LLM'
+    c.LLMDelimiterConfig.end_question_delimiter = 'END QUESTION_LLM'
+    c.LLMDelimiterConfig.begin_criteria_delimiter = 'BEGIN CRITERIA_LLM'
+    c.LLMDelimiterConfig.end_criteria_delimiter = 'END CRITERIA_LLM'
+
+    # Backward-compatible per-class overrides are still supported and take precedence
+    # c.LLMGrade.begin_question_delimiter = 'BEGIN QUESTION_LLM'
+    # c.ClearLLMCriteria.begin_criteria_delimiter = 'BEGIN CRITERIA_LLM'
     
     # Optional: Set timeout for API calls (in seconds)
     c.LLMGrade.llm_timeout = 30.0

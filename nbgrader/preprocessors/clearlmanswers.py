@@ -2,12 +2,14 @@ import re
 
 from traitlets import Unicode, Dict, Bool
 from textwrap import dedent
+from traitlets.config.loader import Config
 
 from . import NbGraderPreprocessor
+from .llm_delimiters import merge_shared_llm_delimiter_config
 from .. import utils
 from nbformat.notebooknode import NotebookNode
 from nbconvert.exporters.exporter import ResourcesDict
-from typing import Tuple
+from typing import Any, Tuple
 
 
 class ClearLLMAnswers(NbGraderPreprocessor):
@@ -47,6 +49,10 @@ class ClearLLMAnswers(NbGraderPreprocessor):
         "END CRITERIA_LLM",
         help="The delimiter marking the end of criteria (for skipping)"
     ).tag(config=True)
+
+    def _load_config(self, cfg: Config, **kwargs: Any) -> None:
+        merge_shared_llm_delimiter_config(cfg, "ClearLLMAnswers")
+        super(ClearLLMAnswers, self)._load_config(cfg, **kwargs)
 
     def preprocess(self, nb: NotebookNode, resources: ResourcesDict) -> Tuple[NotebookNode, ResourcesDict]:
         language = nb.metadata.get("kernelspec", {}).get("language", "python")

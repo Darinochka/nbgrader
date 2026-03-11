@@ -2,12 +2,14 @@ import re
 
 from traitlets import Unicode, Bool
 from textwrap import dedent
+from traitlets.config.loader import Config
 
 from . import NbGraderPreprocessor
+from .llm_delimiters import merge_shared_llm_delimiter_config
 from .. import utils
 from nbformat.notebooknode import NotebookNode
 from nbconvert.exporters.exporter import ResourcesDict
-from typing import Tuple
+from typing import Any, Tuple
 
 
 class ClearLLMCriteria(NbGraderPreprocessor):
@@ -35,6 +37,10 @@ class ClearLLMCriteria(NbGraderPreprocessor):
             """
         )
     ).tag(config=True)
+
+    def _load_config(self, cfg: Config, **kwargs: Any) -> None:
+        merge_shared_llm_delimiter_config(cfg, "ClearLLMCriteria")
+        super(ClearLLMCriteria, self)._load_config(cfg, **kwargs)
 
     def _remove_criteria_region(self, cell: NotebookNode) -> bool:
         """Find a region in the cell that is delimited by

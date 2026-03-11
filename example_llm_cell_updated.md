@@ -113,14 +113,15 @@ YOUR ANSWER HERE
 c = get_config()
 
 # Настройка разделителей для LLM ячеек
-# Default: 'BEGIN QUESTION_LLM'
-c.LLMGrade.begin_question_delimiter = 'BEGIN QUESTION_LLM'
-# Default: 'END QUESTION_LLM'
-c.LLMGrade.end_question_delimiter = 'END QUESTION_LLM'
-# Default: 'BEGIN CRITERIA_LLM'
-c.ClearLLMCriteria.begin_criteria_delimiter = 'BEGIN CRITERIA_LLM'
-# Default: 'END CRITERIA_LLM'
-c.ClearLLMCriteria.end_criteria_delimiter = 'END CRITERIA_LLM'
+# Общая настройка для LLMGrade, ClearLLMAnswers, ClearLLMCriteria
+c.LLMDelimiterConfig.begin_question_delimiter = 'BEGIN QUESTION_LLM'
+c.LLMDelimiterConfig.end_question_delimiter = 'END QUESTION_LLM'
+c.LLMDelimiterConfig.begin_criteria_delimiter = 'BEGIN CRITERIA_LLM'
+c.LLMDelimiterConfig.end_criteria_delimiter = 'END CRITERIA_LLM'
+
+# Старые per-class параметры тоже работают и имеют приоритет
+# c.LLMGrade.begin_question_delimiter = 'BEGIN QUESTION_LLM'
+# c.ClearLLMCriteria.begin_criteria_delimiter = 'BEGIN CRITERIA_LLM'
 ```
 
 ## Важные замечания

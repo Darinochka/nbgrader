@@ -90,12 +90,12 @@ class TestClearLLMAnswers(BaseTestPreprocessor):
         assert "labeled data" not in cell.source
 
     def test_cell_replaced_with_stub(self, preprocessor):
-        """LLM cells must be replaced with the text stub."""
+        """LLM markdown cells must be replaced with the text stub."""
         nb = _load_source_nb(self)
         preprocessor.preprocess(nb, {})
 
         for cell in nb.cells:
-            if cell.metadata.get("nbgrader", {}).get("llm_graded"):
+            if cell.metadata.get("nbgrader", {}).get("llm_graded") and cell.cell_type == "markdown":
                 assert cell.source == preprocessor.text_stub
 
     def test_non_llm_cells_unchanged(self, preprocessor):
@@ -104,6 +104,26 @@ class TestClearLLMAnswers(BaseTestPreprocessor):
         original_intro = nb.cells[0].source
         preprocessor.preprocess(nb, {})
         assert nb.cells[0].source == original_intro
+
+    def test_code_cell_replaced_with_code_stub(self, preprocessor):
+        """LLM-graded code cells must be replaced with the language-appropriate code stub."""
+        nb = _load_source_nb(self)
+        preprocessor.preprocess(nb, {})
+
+        cell = _find_llm_cell(nb, "llm_code_q1")
+        assert cell.source == preprocessor.code_stub["python"]
+
+    def test_code_cell_question_and_criteria_not_in_stub(self, preprocessor):
+        """After preprocessing, delimiters, question text and criteria must not appear in the code cell."""
+        nb = _load_source_nb(self)
+        preprocessor.preprocess(nb, {})
+
+        cell = _find_llm_cell(nb, "llm_code_q1")
+        assert "BEGIN QUESTION_LLM" not in cell.source
+        assert "END QUESTION_LLM" not in cell.source
+        assert "BEGIN CRITERIA_LLM" not in cell.source
+        assert "END CRITERIA_LLM" not in cell.source
+        assert "square" not in cell.source
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +154,24 @@ class TestClearLLMCriteria(BaseTestPreprocessor):
 
         cell = _find_llm_cell(nb, "llm_essay_q1")
         assert "supervised" in cell.source
+
+    def test_criteria_removed_from_code_cell(self, preprocessor):
+        """Criteria block must be stripped from LLM-graded code cells."""
+        nb = _load_source_nb(self)
+        preprocessor.preprocess(nb, {})
+
+        cell = _find_llm_cell(nb, "llm_code_q1")
+        assert "BEGIN CRITERIA_LLM" not in cell.source
+        assert "END CRITERIA_LLM" not in cell.source
+        assert "x * x" not in cell.source
+
+    def test_question_still_visible_in_code_cell(self, preprocessor):
+        """Question text must remain in code cell after criteria are removed."""
+        nb = _load_source_nb(self)
+        preprocessor.preprocess(nb, {})
+
+        cell = _find_llm_cell(nb, "llm_code_q1")
+        assert "square" in cell.source
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +260,26 @@ class TestLLMGradeWithMock(BaseTestPreprocessor):
         """Build a minimal submitted notebook with a single student-answered cell."""
         from nbformat.v4 import new_markdown_cell
         cell = new_markdown_cell(source=student_answer)
+        cell.metadata["nbgrader"] = {
+            "grade": True,
+            "grade_id": grade_id,
+            "locked": False,
+            "points": points,
+            "schema_version": 4,
+            "solution": True,
+            "task": False,
+            "llm_graded": True,
+        }
+        nb = new_notebook()
+        nb.cells.append(cell)
+        nb.metadata["kernelspec"] = {"language": "python", "name": "python3",
+                                     "display_name": "Python 3"}
+        return nb
+
+    def _make_submitted_nb_code(self, grade_id: str, student_code: str, points: float):
+        """Build a minimal submitted notebook with a single student code cell."""
+        from nbformat.v4 import new_code_cell
+        cell = new_code_cell(source=student_code)
         cell.metadata["nbgrader"] = {
             "grade": True,
             "grade_id": grade_id,
@@ -351,3 +409,29 @@ class TestLLMGradeWithMock(BaseTestPreprocessor):
             preprocessors[1].preprocess(submitted, resources)
 
         mock_api.assert_not_called()
+
+    def test_llm_grade_code_cell_returns_score(self, preprocessors, gradebook, resources):
+        """LLMGrade must grade code cells and store the score just like markdown cells."""
+        self._setup_source_in_db(preprocessors, resources)
+        gradebook.add_submission("ps0", "bar")
+
+        submitted = self._make_submitted_nb_code(
+            "llm_code_q1",
+            "def square(x):\n    return x * x",
+            5.0,
+        )
+
+        preprocessors[1].llm_api_key = "test-key"
+
+        with patch.object(preprocessors[1], "_call_llm_api", return_value="4") as mock_api:
+            preprocessors[1].preprocess(submitted, resources)
+            preprocessors[2].preprocess(submitted, resources)
+
+        mock_api.assert_called_once()
+        prompt_used = mock_api.call_args[0][0]
+        assert "square" in prompt_used.lower()
+        assert "x * x" in prompt_used or "x ** 2" in prompt_used
+
+        grade = gradebook.find_grade("llm_code_q1", "test", "ps0", "bar")
+        assert grade.auto_score == 4.0
+        assert not grade.needs_manual_grade

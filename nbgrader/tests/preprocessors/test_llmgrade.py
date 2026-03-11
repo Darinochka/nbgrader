@@ -2,7 +2,8 @@ import copy
 import pytest
 from unittest.mock import patch, MagicMock
 
-from nbformat.v4 import new_notebook
+from nbformat.v4 import new_notebook, new_code_cell, new_markdown_cell
+from nbformat.notebooknode import NotebookNode
 
 from ...preprocessors import SaveCells, LLMGrade, SaveAutoGrades
 from ...preprocessors.clearlmanswers import ClearLLMAnswers
@@ -231,6 +232,7 @@ class TestLLMGradePromptAssembly(BaseTestPreprocessor):
             student_answer=student_answer,
             grading_instructions=criteria,
             max_points=max_points,
+            cell_output="",
         )
 
         assert question in prompt
@@ -435,3 +437,174 @@ class TestLLMGradeWithMock(BaseTestPreprocessor):
         grade = gradebook.find_grade("llm_code_q1", "test", "ps0", "bar")
         assert grade.auto_score == 4.0
         assert not grade.needs_manual_grade
+
+    def _make_submitted_nb_code_with_output(self, grade_id, code, outputs, points):
+        """Build a submitted code cell notebook with pre-populated outputs."""
+        cell = new_code_cell(source=code)
+        cell.metadata["nbgrader"] = {
+            "grade": True,
+            "grade_id": grade_id,
+            "locked": False,
+            "points": points,
+            "schema_version": 4,
+            "solution": True,
+            "task": False,
+            "llm_graded": True,
+        }
+        cell.outputs = outputs
+        nb = new_notebook()
+        nb.cells.append(cell)
+        nb.metadata["kernelspec"] = {"language": "python", "name": "python3",
+                                     "display_name": "Python 3"}
+        return nb
+
+    def test_code_cell_stream_output_included_in_prompt(self, preprocessors, gradebook, resources):
+        """Stream output of a code cell must appear in the prompt."""
+        self._setup_source_in_db(preprocessors, resources)
+        gradebook.add_submission("ps0", "bar")
+
+        stream_output = NotebookNode(output_type="stream", name="stdout", text="hello world\n")
+        submitted = self._make_submitted_nb_code_with_output(
+            "llm_code_q1",
+            "def square(x):\n    return x * x\nprint('hello world')",
+            [stream_output],
+            5.0,
+        )
+
+        preprocessors[1].llm_api_key = "test-key"
+
+        with patch.object(preprocessors[1], "_call_llm_api", return_value="5") as mock_api:
+            preprocessors[1].preprocess(submitted, resources)
+
+        prompt_used = mock_api.call_args[0][0]
+        assert "hello world" in prompt_used
+        assert "Cell Output:" in prompt_used
+
+    def test_image_output_excluded_from_prompt(self, preprocessors, gradebook, resources):
+        """Image-only cell output must not appear in the prompt."""
+        self._setup_source_in_db(preprocessors, resources)
+        gradebook.add_submission("ps0", "bar")
+
+        image_output = NotebookNode(
+            output_type="display_data",
+            data={"image/png": "iVBORw0KGgoAAAANSUhEUgAAAAUA"},
+            metadata={},
+        )
+        submitted = self._make_submitted_nb_code_with_output(
+            "llm_code_q1",
+            "import matplotlib.pyplot as plt\nplt.plot([1,2,3])\nplt.show()",
+            [image_output],
+            5.0,
+        )
+
+        preprocessors[1].llm_api_key = "test-key"
+
+        with patch.object(preprocessors[1], "_call_llm_api", return_value="3") as mock_api:
+            preprocessors[1].preprocess(submitted, resources)
+
+        prompt_used = mock_api.call_args[0][0]
+        assert "iVBORw0KGgo" not in prompt_used
+        assert "Cell Output:" not in prompt_used
+
+    def test_no_output_code_cell_prompt_works(self, preprocessors, gradebook, resources):
+        """A code cell with no outputs must not add a Cell Output section to the prompt."""
+        self._setup_source_in_db(preprocessors, resources)
+        gradebook.add_submission("ps0", "bar")
+
+        submitted = self._make_submitted_nb_code(
+            "llm_code_q1",
+            "def square(x):\n    return x * x",
+            5.0,
+        )
+
+        preprocessors[1].llm_api_key = "test-key"
+
+        with patch.object(preprocessors[1], "_call_llm_api", return_value="5") as mock_api:
+            preprocessors[1].preprocess(submitted, resources)
+
+        prompt_used = mock_api.call_args[0][0]
+        assert "Cell Output:" not in prompt_used
+
+
+# ---------------------------------------------------------------------------
+# Tests: LLMGrade._extract_cell_output unit tests
+# ---------------------------------------------------------------------------
+
+class TestExtractCellOutput(BaseTestPreprocessor):
+    """Unit tests for the _extract_cell_output helper."""
+
+    @pytest.fixture
+    def grader(self):
+        return LLMGrade()
+
+    def _stream_output(self, text, name="stdout"):
+        return NotebookNode(output_type="stream", name=name, text=text)
+
+    def _execute_result(self, text_plain):
+        return NotebookNode(
+            output_type="execute_result",
+            data={"text/plain": text_plain},
+            metadata={},
+            execution_count=1,
+        )
+
+    def _display_data(self, data):
+        return NotebookNode(output_type="display_data", data=data, metadata={})
+
+    def _error_output(self, ename, evalue):
+        return NotebookNode(output_type="error", ename=ename, evalue=evalue, traceback=[])
+
+    def test_markdown_cell_returns_empty(self, grader):
+        cell = new_markdown_cell(source="Some answer")
+        assert grader._extract_cell_output(cell) == ""
+
+    def test_code_cell_no_outputs_returns_empty(self, grader):
+        cell = new_code_cell(source="x = 1")
+        assert grader._extract_cell_output(cell) == ""
+
+    def test_stream_output_extracted(self, grader):
+        cell = new_code_cell(source="print('hi')")
+        cell.outputs = [self._stream_output("hi\n")]
+        assert "hi" in grader._extract_cell_output(cell)
+
+    def test_execute_result_extracted(self, grader):
+        cell = new_code_cell(source="2 + 2")
+        cell.outputs = [self._execute_result("4")]
+        assert "4" in grader._extract_cell_output(cell)
+
+    def test_image_only_display_data_excluded(self, grader):
+        cell = new_code_cell(source="plt.show()")
+        cell.outputs = [self._display_data({"image/png": "abc123"})]
+        assert grader._extract_cell_output(cell) == ""
+
+    def test_mixed_display_data_text_included_image_excluded(self, grader):
+        cell = new_code_cell(source="display(something)")
+        cell.outputs = [self._display_data({
+            "text/plain": "Some repr",
+            "image/png": "abc123",
+        })]
+        result = grader._extract_cell_output(cell)
+        assert "Some repr" in result
+        assert "abc123" not in result
+
+    def test_error_output_extracted(self, grader):
+        cell = new_code_cell(source="1/0")
+        cell.outputs = [self._error_output("ZeroDivisionError", "division by zero")]
+        result = grader._extract_cell_output(cell)
+        assert "ZeroDivisionError" in result
+        assert "division by zero" in result
+
+    def test_multiple_outputs_combined(self, grader):
+        cell = new_code_cell(source="print('a')\n1 + 1")
+        cell.outputs = [
+            self._stream_output("a\n"),
+            self._execute_result("2"),
+        ]
+        result = grader._extract_cell_output(cell)
+        assert "a" in result
+        assert "2" in result
+
+    def test_stderr_stream_included(self, grader):
+        cell = new_code_cell(source="import sys; sys.stderr.write('warn')")
+        cell.outputs = [self._stream_output("warn", name="stderr")]
+        assert "warn" in grader._extract_cell_output(cell)

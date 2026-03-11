@@ -64,7 +64,7 @@ class LLMGrade(NbGraderPreprocessor):
         Question: {question}
 
         Student's Answer: {student_answer}
-
+        {cell_output}
         Grading Instructions (hidden from student): {grading_instructions}
 
         Maximum Points: {max_points}
@@ -76,6 +76,7 @@ class LLMGrade(NbGraderPreprocessor):
             Template for the prompt sent to the LLM. Should contain placeholders:
             - {question}: The visible question text
             - {student_answer}: The student's answer
+            - {cell_output}: Output of the code cell (empty string for non-code cells or cells with no text output)
             - {grading_instructions}: The hidden grading instructions
             - {max_points}: Maximum points for this question
             """
@@ -273,6 +274,37 @@ class LLMGrade(NbGraderPreprocessor):
         )
         return None
 
+    # MIME types that represent image data and should be excluded from the prompt
+    _IMAGE_MIME_TYPES = frozenset({
+        "image/png", "image/jpeg", "image/gif", "image/svg+xml", "image/webp",
+    })
+
+    def _extract_cell_output(self, cell: NotebookNode) -> str:
+        """Return the text outputs of a code cell, skipping image-only outputs.
+
+        Returns an empty string for non-code cells or cells with no text output.
+        """
+        if cell.cell_type != "code":
+            return ""
+
+        output_parts = []
+        for output in cell.get("outputs", []):
+            otype = output.get("output_type", "")
+            if otype == "stream":
+                text = output.get("text", "")
+                output_parts.append(text if isinstance(text, str) else "".join(text))
+            elif otype in ("execute_result", "display_data"):
+                data = output.get("data", {})
+                if any(k not in self._IMAGE_MIME_TYPES for k in data):
+                    text = data.get("text/plain", "")
+                    output_parts.append(text if isinstance(text, str) else "".join(text))
+            elif otype == "error":
+                ename = output.get("ename", "")
+                evalue = output.get("evalue", "")
+                output_parts.append(f"{ename}: {evalue}")
+
+        return "\n".join(p for p in output_parts if p).strip()
+
     def _grade_with_llm(self, cell: NotebookNode) -> Optional[float]:
         """Grade a cell using LLM."""
         if not self.llm_api_key:
@@ -295,6 +327,10 @@ class LLMGrade(NbGraderPreprocessor):
             # Get student's answer from current cell
             student_answer = cell.source
 
+            # Extract text outputs for code cells (images are excluded)
+            cell_output = self._extract_cell_output(cell)
+            cell_output_section = f"\nCell Output:\n{cell_output}\n" if cell_output else ""
+
             # Get max points
             max_points = float(cell.metadata['nbgrader']['points'])
 
@@ -303,7 +339,8 @@ class LLMGrade(NbGraderPreprocessor):
                 question=question_text,
                 student_answer=student_answer,
                 grading_instructions=criteria_text,
-                max_points=max_points
+                max_points=max_points,
+                cell_output=cell_output_section,
             )
 
             # Call LLM API

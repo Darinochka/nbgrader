@@ -107,7 +107,21 @@ class MetadataValidatorV4(BaseMetadataValidator):
                 raise ValidationError(
                     "Task cells have to be markdown: {}".format(cell.source))
 
+    def _upgrade_v3_cells_only(self, nb: NotebookNode) -> None:
+        """Silently upgrade v3 cells to v4 during validation.
+
+        Only handles v3→v4 so that intentionally-old (v0/v1/v2) notebooks
+        still raise SchemaTooOldError, keeping `nbgrader update` meaningful.
+        """
+        for cell in nb.cells:
+            if 'nbgrader' not in cell.metadata:
+                continue
+            if cell.metadata['nbgrader'].get('schema_version') == 3:
+                self._upgrade_v3_to_v4(cell)
+                self._remove_extra_keys(cell)
+
     def validate_nb(self, nb: NotebookNode) -> None:
+        self._upgrade_v3_cells_only(nb)
         super(MetadataValidatorV4, self).validate_nb(nb)
 
         ids = set([])

@@ -119,17 +119,16 @@ class ClearLLMAnswers(NbGraderPreprocessor):
 
         language = resources["language"]
 
-        # Validate question/criteria structure (raises on malformed regions)
-        # but intentionally discard the question itself so it is not shown.
-        self._extract_question_region(cell)
+        question_text, _ = self._extract_question_region(cell)
 
         if cell.cell_type == 'code':
             stub = self.code_stub[language]
         else:
             stub = self.text_stub
 
-        # Always replace the entire cell contents with the stub so that
-        # neither the delimiters nor the question are visible to students.
-        cell.source = stub
+        if question_text.strip():
+            cell.source = question_text.strip() + "\n\n" + stub
+        else:
+            cell.source = stub
 
         return cell, resources

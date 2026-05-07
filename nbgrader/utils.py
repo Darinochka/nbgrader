@@ -36,6 +36,13 @@ def is_task(cell: NotebookNode) -> bool:
     return cell.metadata['nbgrader'].get('task', False)
 
 
+def is_llm_graded(cell: NotebookNode) -> bool:
+    """Returns True if the cell is an LLM graded cell."""
+    if 'nbgrader' not in cell.metadata:
+        return False
+    return cell.metadata['nbgrader'].get('llm_graded', False)
+
+
 def is_grade(cell: NotebookNode) -> bool:
     """Returns True if the cell is a grade cell."""
     if 'nbgrader' not in cell.metadata:
@@ -130,6 +137,12 @@ def determine_grade(cell: NotebookNode, log: Logger = None) -> Tuple[Optional[fl
         raise ValueError("cell is not a grade cell")
 
     max_points = float(cell.metadata['nbgrader']['points'])
+    
+    # LLM graded cells are handled by the LLMGrade preprocessor
+    # Return None here to indicate manual grading is needed (via LLM)
+    if is_llm_graded(cell):
+        return None, max_points
+    
     if is_solution(cell):
         # if it's a solution cell and the checksum hasn't changed, that means
         # they didn't provide a response, so we can automatically give this a
@@ -586,3 +599,62 @@ def notebook_hash(path=None, unique_key=None, secret=None, notebook_id=None):
 def make_unique_key(course_id, assignment_id, notebook_id, student_id, timestamp):
     return "+".join([
         course_id, assignment_id, notebook_id, student_id, timestamp])
+
+
+def extract_hidden_grading_instructions(cell_source: str, begin_delimiter: str = "###", end_delimiter: str = "###") -> Tuple[str, str]:
+    """Extract hidden grading instructions from cell source.
+    
+    This function extracts content between delimiters (typically ###) which
+    contains grading instructions that should be hidden from students but used
+    by LLM for grading.
+    
+    DEPRECATED: This function is kept for backward compatibility. For LLM graded cells,
+    use the new structure with BEGIN QUESTION_LLM/END QUESTION_LLM and 
+    BEGIN CRITERIA_LLM/END CRITERIA_LLM delimiters.
+    
+    Parameters
+    ----------
+    cell_source : str
+        The source code/text of the cell
+    begin_delimiter : str
+        The delimiter marking the beginning of hidden content (default: "###")
+    end_delimiter : str
+        The delimiter marking the end of hidden content (default: "###")
+    
+    Returns
+    -------
+    Tuple[str, str]
+        A tuple of (visible_content, hidden_instructions). If no hidden content
+        is found, hidden_instructions will be an empty string.
+    """
+    lines = cell_source.split("\n")
+    
+    visible_lines = []
+    hidden_lines = []
+    in_hidden = False
+    
+    for line in lines:
+        if begin_delimiter in line:
+            if in_hidden:
+                raise ValueError("Nested begin delimiter found in cell source")
+            in_hidden = True
+            # Remove the delimiter line itself
+            continue
+        elif end_delimiter in line:
+            if not in_hidden:
+                raise ValueError("End delimiter found without matching begin delimiter")
+            in_hidden = False
+            # Remove the delimiter line itself
+            continue
+        elif in_hidden:
+            hidden_lines.append(line)
+        else:
+            visible_lines.append(line)
+    
+    if in_hidden:
+        raise ValueError("Begin delimiter found without matching end delimiter")
+    
+    visible_content = "\n".join(visible_lines)
+    hidden_instructions = "\n".join(hidden_lines)
+    
+    return visible_content, hidden_instructions

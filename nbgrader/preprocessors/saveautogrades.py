@@ -41,9 +41,25 @@ class SaveAutoGrades(NbGraderPreprocessor):
             self.assignment_id,
             self.student_id)
 
-        # determine what the grade is
-        auto_score, _ = utils.determine_grade(cell, self.log)
-        grade.auto_score = auto_score
+        # Check if LLM score is available (from LLMGrade preprocessor)
+        # LLM scores are stored in resources dict, not in cell metadata
+        grade_id = cell.metadata['nbgrader']['grade_id']
+        if utils.is_llm_graded(cell) and 'llm_scores' in resources['nbgrader']:
+            llm_scores = resources['nbgrader']['llm_scores']
+            if grade_id in llm_scores:
+                llm_score = llm_scores[grade_id]
+                if llm_score is not None:
+                    grade.auto_score = float(llm_score)
+                else:
+                    grade.auto_score = None
+            else:
+                # No LLM score for this cell, use standard logic
+                auto_score, _ = utils.determine_grade(cell, self.log)
+                grade.auto_score = auto_score
+        else:
+            # determine what the grade is using standard logic
+            auto_score, _ = utils.determine_grade(cell, self.log)
+            grade.auto_score = auto_score
 
         # if there was previously a manual grade, or if there is no autograder
         # score, then we should mark this as needing review

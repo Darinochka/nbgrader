@@ -148,6 +148,10 @@ class ClearSolutions(NbGraderPreprocessor):
                         resources: ResourcesDict,
                         cell_index: int
                         ) -> Tuple[NotebookNode, ResourcesDict]:
+        # Skip LLM graded cells - they are handled separately
+        if utils.is_llm_graded(cell):
+            return cell, resources
+
         # replace solution regions with the relevant stubs
         orig_cell_source = cell.source
         language = resources["language"]

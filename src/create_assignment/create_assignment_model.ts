@@ -101,7 +101,8 @@ export namespace CellModel {
       points: PrivateToolData.getPoints(data),
       schema_version: PrivateToolData.getSchemeaVersion(),
       solution: PrivateToolData.getSolution(data),
-      task: PrivateToolData.getTask(data)
+      task: PrivateToolData.getTask(data),
+      llm_graded: PrivateToolData.getLlmGraded(data)
     }
     return new NbgraderMetadata(nbgraderData);
   }
@@ -129,7 +130,7 @@ export namespace CellModel {
       toolData.id = data?.getGradeId() || '';
     }
 
-    if (data?.isGradable()) {
+    if (data?.isGradable() || data?.isLlmGraded()) {
       toolData.points = data?.getPoints() || 0;
     }
 
@@ -177,7 +178,7 @@ namespace Private {
 
 namespace PrivateToolData {
   export function getGrade(data: ToolData): boolean {
-    return data.type === 'manual' || data.type === 'tests';
+    return data.type === 'manual' || data.type === 'tests' || data.type === 'llm';
   }
 
   export function getGradeId(data: ToolData): string {
@@ -207,11 +208,15 @@ namespace PrivateToolData {
   }
 
   export function getSolution(data: ToolData): boolean {
-    return data.type === 'manual' || data.type === 'solution';
+    return data.type === 'manual' || data.type === 'solution' || data.type === 'llm';
   }
 
   export function getTask(data: ToolData): boolean {
     return data.type === 'task';
+  }
+
+  export function getLlmGraded(data: ToolData): boolean {
+    return data.type === 'llm';
   }
 }
 
@@ -257,7 +262,9 @@ export class NbgraderMetadata implements INbgraderMetadata{
   }
 
   getType(cellType: nbformat.CellType): CellType {
-    if (this.isTask()) {
+    if (this.isLlmGraded()) {
+      return 'llm';
+    } else if (this.isTask()) {
       return 'task';
     } else if (this.isSolution() && this.isGrade()) {
       return 'manual';
@@ -298,6 +305,10 @@ export class NbgraderMetadata implements INbgraderMetadata{
     return this._data.solution || false;
   }
 
+  isLlmGraded(): boolean {
+    return this._data.llm_graded || false;
+  }
+
   toJson(): ReadonlyJSONObject {
     const json = {} as JSONObject;
     if (this.data.grade !== undefined) {
@@ -321,6 +332,9 @@ export class NbgraderMetadata implements INbgraderMetadata{
     if (this.data.task !== undefined) {
       json['task'] = this.data.task;
     }
+    if (this.data.llm_graded !== undefined) {
+      json['llm_graded'] = this.data.llm_graded;
+    }
     return json;
   }
 
@@ -335,6 +349,7 @@ type NbgraderData = {
   schema_version?: number;
   solution?: boolean;
   task?: boolean;
+  llm_graded?: boolean;
 }
 /**
  * Dummy class for representing the UI input/output values.
@@ -347,4 +362,4 @@ export class ToolData {
 }
 
 export type CellType = '' | 'manual' | 'task' | 'solution' | 'tests' |
-    'readonly';
+    'readonly' | 'llm';
